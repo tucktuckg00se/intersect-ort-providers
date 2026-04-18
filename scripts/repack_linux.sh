@@ -5,11 +5,11 @@
 # Usage:
 #   repack_linux.sh --flavour {cpu|cuda12|cuda13} --ort-version X.Y.Z --output /path/out.zip
 #
-# Upstream asset naming for ORT 1.24+ (from github.com/microsoft/onnxruntime/releases):
+# Upstream asset naming for ORT 1.24.x (from github.com/microsoft/onnxruntime/releases):
 #   cpu     -> onnxruntime-linux-x64-<ver>.tgz
-#   cuda12  -> onnxruntime-linux-x64-gpu-cuda12-<ver>.tgz
-#   cuda13  -> onnxruntime-linux-x64-gpu-cuda13-<ver>.tgz
-# If Microsoft changes this, update URL_CPU/URL_CUDA12/URL_CUDA13 below.
+#   cuda12  -> onnxruntime-linux-x64-gpu-<ver>.tgz          (the "gpu" default is cuda12)
+#   cuda13  -> onnxruntime-linux-x64-gpu_cuda13-<ver>.tgz   (note the underscore, not a dash)
+# If Microsoft renames these again, update the case below.
 
 set -euo pipefail
 
@@ -32,8 +32,8 @@ done
 MS_BASE="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}"
 case "$FLAVOUR" in
   cpu)    ASSET="onnxruntime-linux-x64-${ORT_VERSION}.tgz" ;;
-  cuda12) ASSET="onnxruntime-linux-x64-gpu-cuda12-${ORT_VERSION}.tgz" ;;
-  cuda13) ASSET="onnxruntime-linux-x64-gpu-cuda13-${ORT_VERSION}.tgz" ;;
+  cuda12) ASSET="onnxruntime-linux-x64-gpu-${ORT_VERSION}.tgz" ;;
+  cuda13) ASSET="onnxruntime-linux-x64-gpu_cuda13-${ORT_VERSION}.tgz" ;;
   *) die "flavour must be cpu|cuda12|cuda13, got: $FLAVOUR" ;;
 esac
 
@@ -60,6 +60,8 @@ echo ">> repacking to $OUTPUT"
 mkdir -p "$(dirname "$OUTPUT")"
 # zip --symlinks keeps soname chains intact; JUCE ZipFile does not follow symlinks on extract,
 # but dlopen walks the soname chain itself once files are on disk.
-( cd "$STAGE" && zip --symlinks -qr "$OUTPUT" lib include )
+# Resolve OUTPUT to an absolute path before cd, otherwise the zip lands in $STAGE.
+OUTPUT_ABS="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"
+( cd "$STAGE" && zip --symlinks -qr "$OUTPUT_ABS" lib include )
 
-echo ">> done: $(du -h "$OUTPUT" | cut -f1) $OUTPUT"
+echo ">> done: $(du -h "$OUTPUT_ABS" | cut -f1) $OUTPUT_ABS"

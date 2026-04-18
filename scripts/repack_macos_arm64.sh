@@ -43,6 +43,8 @@ cp -a "$EXTRACTED/include" "$STAGE/"
 
 echo ">> repacking to $OUTPUT"
 mkdir -p "$(dirname "$OUTPUT")"
-( cd "$STAGE" && zip --symlinks -qr "$OUTPUT" lib include )
+# Resolve OUTPUT to an absolute path before cd — otherwise the zip lands in $STAGE.
+OUTPUT_ABS="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"
+( cd "$STAGE" && zip --symlinks -qr "$OUTPUT_ABS" lib include )
 
-echo ">> done: $(du -h "$OUTPUT" | cut -f1) $OUTPUT"
+echo ">> done: $(du -h "$OUTPUT_ABS" | cut -f1) $OUTPUT_ABS"

@@ -18,13 +18,17 @@ OUT_DIR="${OUT_DIR:-/out}"
 mkdir -p "$OUT_DIR"
 [[ -d "$OUT_DIR" ]] || die "OUT_DIR=$OUT_DIR not a directory"
 
-# Tooling we need that may not be in the image. The rocm/pytorch image is
-# Ubuntu-based.
+# Tooling we need that may not be in the image. rocm/dev-ubuntu-22.04 is
+# Ubuntu 22.04 Jammy; its apt cmake is 3.22 but ORT 1.24 requires 3.28+, so we
+# grab a recent cmake from pip (kitware-backed wheel).
 echo ">> installing build prerequisites"
 apt-get update
 apt-get install -y --no-install-recommends \
-  git ca-certificates cmake build-essential python3 python3-pip zip
+  git ca-certificates build-essential python3 python3-pip zip
 rm -rf /var/lib/apt/lists/*
+pip3 install --no-cache-dir "cmake>=3.28"
+hash -r
+echo ">> cmake version: $(cmake --version | head -n1)"
 
 SRC=/tmp/ort-src
 rm -rf "$SRC"
@@ -41,6 +45,7 @@ echo ">> running build.sh (this is the slow part)"
   --use_migraphx \
   --migraphx_home /opt/rocm \
   --rocm_home /opt/rocm \
+  --cmake_path "$(command -v cmake)" \
   --skip_tests \
   --allow_running_as_root
 
