@@ -1,0 +1,172 @@
+name: Build ORT Bundles
+
+on:
+  workflow_dispatch:
+    inputs:
+      ort_version:
+        description: "ONNX Runtime version (e.g. 1.24.2)"
+        required: true
+        default: "1.24.2"
+
+concurrency:
+  group: build-ort-${{ inputs.ort_version }}
+  cancel-in-progress: false
+
+jobs:
+  windows-directml:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack DirectML bundle
+        shell: pwsh
+        run: |
+          ./scripts/repack_windows_directml.ps1 `
+            -OrtVersion "${{ inputs.ort_version }}" `
+            -Output "out/onnxruntime-win-x64-directml.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-win-x64-directml
+          path: out/onnxruntime-win-x64-directml.zip
+          if-no-files-found: error
+
+  windows-cpu:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack Windows CPU bundle
+        shell: pwsh
+        run: |
+          ./scripts/repack_windows_cpu.ps1 `
+            -OrtVersion "${{ inputs.ort_version }}" `
+            -Output "out/onnxruntime-win-x64-cpu.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-win-x64-cpu
+          path: out/onnxruntime-win-x64-cpu.zip
+          if-no-files-found: error
+
+  linux-cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack Linux CPU bundle
+        run: |
+          ./scripts/repack_linux.sh \
+            --flavour cpu \
+            --ort-version "${{ inputs.ort_version }}" \
+            --output out/onnxruntime-linux-x64-cpu.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-linux-x64-cpu
+          path: out/onnxruntime-linux-x64-cpu.zip
+          if-no-files-found: error
+
+  linux-cuda12:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack Linux CUDA 12 bundle
+        run: |
+          ./scripts/repack_linux.sh \
+            --flavour cuda12 \
+            --ort-version "${{ inputs.ort_version }}" \
+            --output out/onnxruntime-linux-x64-cuda12.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-linux-x64-cuda12
+          path: out/onnxruntime-linux-x64-cuda12.zip
+          if-no-files-found: error
+
+  linux-cuda13:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack Linux CUDA 13 bundle
+        run: |
+          ./scripts/repack_linux.sh \
+            --flavour cuda13 \
+            --ort-version "${{ inputs.ort_version }}" \
+            --output out/onnxruntime-linux-x64-cuda13.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-linux-x64-cuda13
+          path: out/onnxruntime-linux-x64-cuda13.zip
+          if-no-files-found: error
+
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack macOS arm64 bundle
+        run: |
+          ./scripts/repack_macos_arm64.sh \
+            --ort-version "${{ inputs.ort_version }}" \
+            --output out/onnxruntime-macos-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-macos-arm64
+          path: out/onnxruntime-macos-arm64.zip
+          if-no-files-found: error
+
+  linux-migraphx:
+    runs-on: ubuntu-latest
+    # Built from source inside a ROCm dev container. No AMD GPU is required on
+    # the runner because build.sh compiles against /opt/rocm headers/libs and
+    # we pass --skip_tests. ~60-120 min; runs in parallel with everything else.
+    container:
+      image: docker.io/rocm/dev-ubuntu-22.04:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build MIGraphX bundle
+        env:
+          ORT_VERSION: ${{ inputs.ort_version }}
+          OUT_DIR: ${{ github.workspace }}/out
+        run: |
+          mkdir -p "$OUT_DIR"
+          bash scripts/build_linux_migraphx_in_container.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-linux-x64-migraphx
+          path: out/onnxruntime-linux-x64-migraphx.zip
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [windows-directml, windows-cpu, linux-cpu, linux-cuda12, linux-cuda13, linux-migraphx, macos-arm64]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          # default merges each artifact into its own subdir; we want them flat.
+          merge-multiple: true
+
+      - name: List collected bundles
+        run: ls -la artifacts/
+
+      - name: Generate manifest
+        run: |
+          python3 scripts/emit_manifest.py full \
+            --ort-version "${{ inputs.ort_version }}" \
+            --input-dir artifacts \
+            --output artifacts/intersect_ort_bundles_manifest.json
+          cat artifacts/intersect_ort_bundles_manifest.json
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="ort-${{ inputs.ort_version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists -- uploading assets with --clobber"
+            gh release upload "$TAG" artifacts/*.zip artifacts/intersect_ort_bundles_manifest.json --clobber
+          else
+            gh release create "$TAG" \
+              --title "ONNX Runtime ${{ inputs.ort_version }}" \
+              --notes "ONNX Runtime ${{ inputs.ort_version }} bundles for INTERSECT. MIGraphX bundle is uploaded separately from a local AMD ROCm build." \
+              artifacts/*.zip artifacts/intersect_ort_bundles_manifest.json
+          fi
