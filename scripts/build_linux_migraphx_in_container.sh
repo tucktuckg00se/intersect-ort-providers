@@ -24,8 +24,13 @@ mkdir -p "$OUT_DIR"
 echo ">> installing build prerequisites"
 apt-get update
 apt-get install -y --no-install-recommends \
-  git ca-certificates build-essential python3 python3-pip zip \
-  migraphx migraphx-dev
+  git ca-certificates build-essential python3 python3-pip zip
+# rocm-dev is the meta-package that pulls in the full ROCm dev stack
+# (hip, miopen, migraphx, rocblas, rocfft, etc.) with -dev headers.
+# Needed because migraphx-config.cmake transitively find_package()s
+# MIOpen and friends, so cherry-picking individual packages turns into
+# whack-a-mole.
+apt-get install -y --no-install-recommends rocm-dev
 rm -rf /var/lib/apt/lists/*
 pip3 install --no-cache-dir "cmake>=3.28"
 hash -r
