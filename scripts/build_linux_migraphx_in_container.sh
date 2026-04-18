@@ -24,7 +24,8 @@ mkdir -p "$OUT_DIR"
 echo ">> installing build prerequisites"
 apt-get update
 apt-get install -y --no-install-recommends \
-  git ca-certificates build-essential python3 python3-pip zip
+  git ca-certificates build-essential python3 python3-pip zip \
+  migraphx migraphx-dev
 rm -rf /var/lib/apt/lists/*
 pip3 install --no-cache-dir "cmake>=3.28"
 hash -r
