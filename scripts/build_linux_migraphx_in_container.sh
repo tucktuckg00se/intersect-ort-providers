@@ -33,7 +33,8 @@ apt-get install -y --no-install-recommends \
 #   find_package(MIOpen)          -- needs miopen-hip-dev
 # Install both explicitly.
 apt-get install -y --no-install-recommends \
-  migraphx migraphx-dev miopen-hip-dev
+  migraphx migraphx-dev \
+  miopen-hip-dev rocblas-dev hipblaslt-dev rocrand-dev
 rm -rf /var/lib/apt/lists/*
 pip3 install --no-cache-dir "cmake>=3.28"
 hash -r
