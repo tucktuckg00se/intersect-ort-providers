@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
-# Repack an upstream Microsoft ONNX Runtime Linux x64 tarball into INTERSECT's
+# Repack an upstream Microsoft ONNX Runtime Linux tarball into INTERSECT's
 # zip bundle shape (lib/ + include/ at the top level, symlinks preserved).
 #
 # Usage:
-#   repack_linux.sh --flavour {cpu|cuda12|cuda13} --ort-version X.Y.Z --output /path/out.zip
+#   repack_linux.sh --flavour {cpu|cuda12|cuda13} [--arch {x64|aarch64}] --ort-version X.Y.Z --output /path/out.zip
 #
 # Upstream asset naming for ORT 1.24.x (from github.com/microsoft/onnxruntime/releases):
-#   cpu     -> onnxruntime-linux-x64-<ver>.tgz
-#   cuda12  -> onnxruntime-linux-x64-gpu-<ver>.tgz          (the "gpu" default is cuda12)
-#   cuda13  -> onnxruntime-linux-x64-gpu_cuda13-<ver>.tgz   (note the underscore, not a dash)
-# If Microsoft renames these again, update the case below.
+#   cpu     x64     -> onnxruntime-linux-x64-<ver>.tgz
+#   cpu     aarch64 -> onnxruntime-linux-aarch64-<ver>.tgz
+#   cuda12  x64     -> onnxruntime-linux-x64-gpu-<ver>.tgz          (the "gpu" default is cuda12)
+#   cuda13  x64     -> onnxruntime-linux-x64-gpu_cuda13-<ver>.tgz   (note the underscore, not a dash)
+# The GPU packages are x64 only. If Microsoft renames these again, update the case below.
 
 set -euo pipefail
 
 die() { echo "error: $*" >&2; exit 1; }
 
 FLAVOUR=""
+ARCH="x64"
 ORT_VERSION=""
 OUTPUT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --flavour)     FLAVOUR="$2"; shift 2 ;;
+    --arch)        ARCH="$2"; shift 2 ;;
     --ort-version) ORT_VERSION="$2"; shift 2 ;;
     --output)      OUTPUT="$2"; shift 2 ;;
     *) die "unknown arg: $1" ;;
@@ -30,8 +33,16 @@ done
 [[ -n "$FLAVOUR" && -n "$ORT_VERSION" && -n "$OUTPUT" ]] || die "missing required args"
 
 MS_BASE="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}"
+case "$ARCH" in
+  x64|aarch64) ;;
+  *) die "arch must be x64|aarch64, got: $ARCH" ;;
+esac
+if [[ "$ARCH" == "aarch64" && "$FLAVOUR" != "cpu" ]]; then
+  die "upstream only ships a CPU package for linux-aarch64 (got flavour: $FLAVOUR)"
+fi
+
 case "$FLAVOUR" in
-  cpu)    ASSET="onnxruntime-linux-x64-${ORT_VERSION}.tgz" ;;
+  cpu)    ASSET="onnxruntime-linux-${ARCH}-${ORT_VERSION}.tgz" ;;
   cuda12) ASSET="onnxruntime-linux-x64-gpu-${ORT_VERSION}.tgz" ;;
   cuda13) ASSET="onnxruntime-linux-x64-gpu_cuda13-${ORT_VERSION}.tgz" ;;
   *) die "flavour must be cpu|cuda12|cuda13, got: $FLAVOUR" ;;
@@ -46,7 +57,7 @@ curl -fSL --retry 3 -o "$WORK/$ASSET" "$MS_BASE/$ASSET"
 echo ">> extracting"
 tar -xzf "$WORK/$ASSET" -C "$WORK"
 
-# Upstream tarball expands to onnxruntime-linux-x64-[gpu-*-]VER/{lib,include}
+# Upstream tarball expands to onnxruntime-linux-<arch>-[gpu-*-]VER/{lib,include}
 EXTRACTED="$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -n1)"
 [[ -d "$EXTRACTED/lib" && -d "$EXTRACTED/include" ]] || die "upstream layout unexpected under $EXTRACTED"
 

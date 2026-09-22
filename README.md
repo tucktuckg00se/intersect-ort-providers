@@ -12,7 +12,7 @@ the user's app data folder, and `dlopen`s the runtime.
 GitHub Actions → **Build ORT Bundles** → Run workflow → set `ort_version`
 (default `1.24.2`).
 
-The workflow produces all 7 supported bundles and publishes them as a single
+The workflow produces all 9 supported bundles and publishes them as a single
 GitHub release tagged `ort-<ort_version>` with a manifest JSON.
 
 ## Bundles
@@ -21,7 +21,9 @@ GitHub release tagged `ort-<ort_version>` with a manifest JSON.
 | -------------------- | ----------------------------------------- | ------------------- |
 | `win-x64-directml`   | Microsoft.ML.OnnxRuntime.DirectML NuGet   | CI (windows-latest) |
 | `win-x64-cpu`        | Microsoft `onnxruntime-win-x64-<ver>.zip` | CI (windows-latest) |
+| `win-arm64-cpu`      | Microsoft `onnxruntime-win-arm64-<ver>.zip` | CI (windows-latest) |
 | `linux-x64-cpu`      | Microsoft `onnxruntime-linux-x64-<ver>.tgz` | CI (ubuntu-latest) |
+| `linux-arm64-cpu`    | Microsoft `onnxruntime-linux-aarch64-<ver>.tgz` | CI (ubuntu-latest) |
 | `linux-x64-cuda12`   | Microsoft `onnxruntime-linux-x64-gpu-cuda12-<ver>.tgz` | CI (ubuntu-latest) |
 | `linux-x64-cuda13`   | Microsoft `onnxruntime-linux-x64-gpu-cuda13-<ver>.tgz` | CI (ubuntu-latest) |
 | `linux-x64-migraphx` | Self-built from `microsoft/onnxruntime` source with `--use_migraphx` | CI (ubuntu-latest, `rocm/dev-ubuntu-22.04` container) |

@@ -61,6 +61,41 @@ jobs:
           path: out/onnxruntime-linux-x64-cpu.zip
           if-no-files-found: error
 
+  linux-arm64-cpu:
+    # The repack only downloads and re-zips, so an x64 runner is fine for the aarch64 package.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack Linux ARM64 CPU bundle
+        run: |
+          ./scripts/repack_linux.sh \
+            --flavour cpu \
+            --arch aarch64 \
+            --ort-version "${{ inputs.ort_version }}" \
+            --output out/onnxruntime-linux-arm64-cpu.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-linux-arm64-cpu
+          path: out/onnxruntime-linux-arm64-cpu.zip
+          if-no-files-found: error
+
+  windows-arm64-cpu:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack Windows ARM64 CPU bundle
+        shell: pwsh
+        run: |
+          ./scripts/repack_windows_cpu.ps1 `
+            -OrtVersion "${{ inputs.ort_version }}" `
+            -Arch arm64 `
+            -Output "out/onnxruntime-win-arm64-cpu.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-win-arm64-cpu
+          path: out/onnxruntime-win-arm64-cpu.zip
+          if-no-files-found: error
+
   linux-cuda12:
     runs-on: ubuntu-latest
     steps:
@@ -132,7 +167,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: [windows-directml, windows-cpu, linux-cpu, linux-cuda12, linux-cuda13, linux-migraphx, macos-arm64]
+    needs: [windows-directml, windows-cpu, windows-arm64-cpu, linux-cpu, linux-arm64-cpu, linux-cuda12, linux-cuda13, linux-migraphx, macos-arm64]
     permissions:
       contents: write
     steps:

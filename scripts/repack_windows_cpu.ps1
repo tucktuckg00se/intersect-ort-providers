@@ -1,11 +1,13 @@
-# Repack the upstream Microsoft onnxruntime-win-x64-<ver>.zip into our bundle shape.
+# Repack the upstream Microsoft onnxruntime-win-<arch>-<ver>.zip into our bundle shape.
 # Usage:
 #   pwsh -File repack_windows_cpu.ps1 -OrtVersion 1.24.2 -Output path\to\onnxruntime-win-x64-cpu.zip
+#   pwsh -File repack_windows_cpu.ps1 -OrtVersion 1.24.2 -Arch arm64 -Output path\to\onnxruntime-win-arm64-cpu.zip
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$OrtVersion,
-    [Parameter(Mandatory=$true)][string]$Output
+    [Parameter(Mandatory=$true)][string]$Output,
+    [ValidateSet("x64", "arm64")][string]$Arch = "x64"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,7 +17,7 @@ if (-not $env:RUNNER_TEMP) { $work = Join-Path $env:TEMP ("ort-wincpu-" + [guid]
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
 try {
-    $asset = "onnxruntime-win-x64-$OrtVersion.zip"
+    $asset = "onnxruntime-win-$Arch-$OrtVersion.zip"
     $url = "https://github.com/microsoft/onnxruntime/releases/download/v$OrtVersion/$asset"
     $zip = Join-Path $work $asset
     Write-Host ">> downloading $url"
@@ -25,7 +27,7 @@ try {
     Write-Host ">> extracting"
     Expand-Archive -Path $zip -DestinationPath $extract -Force
 
-    # Upstream zip expands to onnxruntime-win-x64-<ver>/{lib,include}
+    # Upstream zip expands to onnxruntime-win-<arch>-<ver>/{lib,include}
     $inner = Get-ChildItem -Directory $extract | Select-Object -First 1
     if (-not $inner) { throw "upstream zip had no top-level directory" }
     $srcLib = Join-Path $inner.FullName "lib"

@@ -35,6 +35,8 @@ BUNDLE_TABLE: dict[str, tuple[str, str]] = {
     "onnxruntime-linux-x64-cuda13.zip":   ("linux-x64-cuda13",   "libonnxruntime.so"),
     "onnxruntime-linux-x64-migraphx.zip": ("linux-x64-migraphx", "libonnxruntime.so"),
     "onnxruntime-macos-arm64.zip":        ("macos-arm64",        "libonnxruntime.dylib"),
+    "onnxruntime-linux-arm64-cpu.zip":    ("linux-arm64-cpu",    "libonnxruntime.so"),
+    "onnxruntime-win-arm64-cpu.zip":      ("win-arm64-cpu",      "onnxruntime.dll"),
 }
 
 
