@@ -148,8 +148,11 @@ jobs:
     # Built from source inside a ROCm dev container. No AMD GPU is required on
     # the runner because build.sh compiles against /opt/rocm headers/libs and
     # we pass --skip_tests. ~60-120 min; runs in parallel with everything else.
+    # Pinned: `latest` moved to the 7.14 "-full" images, which don't have the ROCm apt repo that
+    # the migraphx / miopen-hip-dev / rocblas-dev packages come from. 7.2.2 is what built the
+    # published 1.24.2 bundle (it links libamdhip64.so.7 / libmigraphx_c.so.3, i.e. any ROCm 7.x).
     container:
-      image: docker.io/rocm/dev-ubuntu-22.04:latest
+      image: docker.io/rocm/dev-ubuntu-22.04:7.2.2
     steps:
       - uses: actions/checkout@v4
       - name: Build MIGraphX bundle
