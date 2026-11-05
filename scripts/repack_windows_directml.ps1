@@ -35,11 +35,22 @@ try {
         if (-not (Test-Path $p)) { throw "expected path missing in ORT nupkg: $p" }
     }
 
-    # Pull DirectML.dll out of Microsoft.AI.DirectML. No version pin — we take
-    # whatever the latest stable is, which is what ORT binds against at build
-    # time anyway.
+    # Pull DirectML.dll out of Microsoft.AI.DirectML, at exactly the version this
+    # ORT release declares as its dependency (1.15.4 for ORT 1.24.2). Taking
+    # "latest" would silently pair ORT with a DirectML it wasn't tested against
+    # as soon as Microsoft publishes a newer one.
+    $nuspec = Get-ChildItem -Path $ortExtract -Filter "*.nuspec" | Select-Object -First 1
+    if (-not $nuspec) { throw "no .nuspec in ORT nupkg" }
+    [xml]$spec = Get-Content $nuspec.FullName
+    $dmlDep = $spec.package.metadata.dependencies.group.dependency |
+        Where-Object { $_.id -eq "Microsoft.AI.DirectML" } | Select-Object -First 1
+    if (-not $dmlDep) { throw "ORT nuspec declares no Microsoft.AI.DirectML dependency" }
+    # NuGet versions may be ranges like "[1.15.4]" or "[1.15.4, 1.16)"; take the lower bound.
+    $dmlVersion = ($dmlDep.version -replace '[\[\]\(\)\s]', '').Split(',')[0]
+    if (-not $dmlVersion) { throw "can't parse Microsoft.AI.DirectML version '$($dmlDep.version)'" }
+    Write-Host ">> ORT $OrtVersion declares Microsoft.AI.DirectML $dmlVersion"
     $dmlNupkg = Join-Path $work "ai-dml.nupkg"
-    $dmlUrl = "https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML"
+    $dmlUrl = "https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/$dmlVersion"
     Write-Host ">> downloading $dmlUrl"
     Invoke-WebRequest -Uri $dmlUrl -OutFile $dmlNupkg -UseBasicParsing
 
