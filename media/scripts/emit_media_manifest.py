@@ -44,17 +44,24 @@ def main() -> int:
     parser.add_argument("--ffmpeg-version", required=True)
     parser.add_argument("--qjs-version", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--base-url",
+                        help="where the zips live, instead of the GitHub release (local testing: "
+                             "a file:// folder URL, used with INTERSECT_MEDIA_TOOLS_MANIFEST)")
+    parser.add_argument("--platforms", nargs="+", choices=PLATFORMS, default=list(PLATFORMS),
+                        help="subset of platforms (local testing only; releases need all six)")
     args = parser.parse_args()
+    base = (args.base_url.rstrip("/") if args.base_url
+            else f"https://github.com/{args.repo}/releases/download/{args.tag}")
 
     platforms = {}
-    for platform in PLATFORMS:
+    for platform in args.platforms:
         name = f"intersect-media-tools-{platform}.zip"
         path = args.input_dir / name
         if not path.is_file():
             raise SystemExit(f"error: {path} missing; every platform must be built before publishing")
         exe = ".exe" if platform.startswith("win-") else ""
         platforms[platform] = {
-            "download_url": f"https://github.com/{args.repo}/releases/download/{args.tag}/{name}",
+            "download_url": f"{base}/{name}",
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "bytes": path.stat().st_size,
             "ffmpeg": f"ffmpeg{exe}",
