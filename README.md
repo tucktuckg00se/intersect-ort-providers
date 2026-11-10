@@ -1,7 +1,12 @@
-# intersect-ort-providers
+# intersect-tools
 
-Builds and publishes per-platform / per-GPU ONNX Runtime bundles consumed by the
-[INTERSECT plugin](https://github.com/tucktuckg00se/tuckers-sampler) at runtime.
+Builds and publishes the runtimes the
+[INTERSECT plugin](https://github.com/tucktuckg00se/tuckers-sampler) downloads on demand:
+per-platform / per-GPU ONNX Runtime bundles for stem separation, and ffmpeg + QuickJS for
+Import from URL (see [Media tools](#media-tools-import-from-url)).
+
+This repo used to be called `intersect-ort-providers`. GitHub redirects the old URLs, and
+INTERSECT 0.19.0 and earlier still use them, so the old name must never be reused.
 
 The plugin ships no ORT shared library inside its plugin zip. On first stem
 separation it downloads the matching bundle from a release here, extracts it to
@@ -54,7 +59,7 @@ using `juce::ZipFile::uncompressTo` (no system `tar` dependency).
 
 Each release publishes `intersect_ort_bundles_manifest.json` alongside the
 bundle zips. The plugin fetches the latest manifest from
-`https://github.com/tucktuckg00se/intersect-ort-providers/releases/latest/download/intersect_ort_bundles_manifest.json`
+`https://github.com/tucktuckg00se/intersect-tools/releases/latest/download/intersect_ort_bundles_manifest.json`
 to resolve download URLs and sizes without hardcoding asset IDs.
 
 Schema (consumed by `applyOrtManifestEntryToCatalogEntry` in the plugin's
@@ -66,7 +71,7 @@ Schema (consumed by `applyOrtManifestEntryToCatalogEntry` in the plugin's
   "bundles": [
     {
       "bundle_id": "linux-x64-cuda12",
-      "download_url": "https://github.com/tucktuckg00se/intersect-ort-providers/releases/download/ort-1.24.2/onnxruntime-linux-x64-cuda12.zip",
+      "download_url": "https://github.com/tucktuckg00se/intersect-tools/releases/download/ort-1.24.2/onnxruntime-linux-x64-cuda12.zip",
       "download_bytes": 420000000,
       "library_file": "libonnxruntime.so",
       "sha256": "..."

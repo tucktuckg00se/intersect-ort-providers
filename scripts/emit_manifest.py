@@ -24,7 +24,7 @@ import json
 import sys
 from pathlib import Path
 
-REPO = "tucktuckg00se/intersect-ort-providers"
+REPO = "tucktuckg00se/intersect-tools"
 
 # Archive name -> (bundle_id, library_file). bundle_id matches the plugin catalog's directoryName.
 BUNDLE_TABLE: dict[str, tuple[str, str]] = {
