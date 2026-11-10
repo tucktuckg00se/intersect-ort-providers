@@ -1,0 +1,179 @@
+name: Build Media Tools
+
+# ffmpeg (audio-focused LGPL build) + QuickJS-NG for INTERSECT's "Import from URL", built from the
+# official submodules in media/. yt-dlp itself is never built or hosted here: the plugin downloads
+# it straight from yt-dlp's own releases.
+#
+# Manual runs build and smoke-test all six platforms. Tick "publish" to also create a
+# media-<ffmpeg>-<qjs> release. Media releases are NEVER marked "latest": installed plugins read
+# releases/latest/download/intersect_ort_bundles_manifest.json, so "latest" must stay on the
+# newest ort-* release. The plugin finds media releases through the releases API instead.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a media-<ffmpeg>-<qjs> release (never marked latest)"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - "media/**"
+      - ".github/workflows/media.yml"
+
+concurrency:
+  group: media-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux builds run in ubuntu:22.04 so the binaries need glibc <= 2.35, like the plugin.
+          - { target: linux-x64,   runner: ubuntu-24.04,     container: "docker.io/library/ubuntu:22.04" }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, container: "docker.io/library/ubuntu:22.04" }
+          # Windows builds cross-compile with llvm-mingw (pinned + sha256-checked in ci_deps_ubuntu.sh).
+          - { target: win-x64,     runner: ubuntu-24.04,     container: "docker.io/library/ubuntu:22.04", mingw: true }
+          - { target: win-arm64,   runner: ubuntu-24.04,     container: "docker.io/library/ubuntu:22.04", mingw: true }
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64,   runner: macos-15-intel }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Install git (container)
+        if: matrix.container
+        # actions/checkout only fetches submodules when git is installed.
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates > /dev/null
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install build dependencies (container)
+        if: matrix.container
+        # $RUNNER_TEMP, not ${{ runner.temp }}: in container jobs the expression gives the host path.
+        run: bash media/scripts/ci_deps_ubuntu.sh ${{ matrix.mingw && '--llvm-mingw "$RUNNER_TEMP/llvm-mingw"' || '' }}
+
+      - name: Put llvm-mingw on PATH
+        if: matrix.mingw
+        run: echo "$RUNNER_TEMP/llvm-mingw/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: bash media/scripts/build_tools.sh --target ${{ matrix.target }} --out out
+
+      - name: Check glibc baseline
+        if: startsWith(matrix.target, 'linux-')
+        run: |
+          mkdir check
+          python3 -m zipfile -e out/intersect-media-tools-${{ matrix.target }}.zip check
+          for b in ffmpeg qjs; do
+            echo "$b needs $(objdump -T check/$b | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1)"
+            if objdump -T check/$b | grep -qE 'GLIBC_2\.(3[6-9]|[4-9][0-9])'; then
+              echo "::error::$b needs a glibc newer than 2.35"; exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media-${{ matrix.target }}
+          path: out/intersect-media-tools-${{ matrix.target }}.zip
+          if-no-files-found: error
+
+  smoke:
+    name: smoke ${{ matrix.target }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners for every platform; Linux on 22.04, the oldest glibc we promise.
+          - { target: linux-x64,   runner: ubuntu-22.04 }
+          - { target: linux-arm64, runner: ubuntu-22.04-arm }
+          - { target: win-x64,     runner: windows-latest }
+          - { target: win-arm64,   runner: windows-11-arm }
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64,   runner: macos-15-intel }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: media-${{ matrix.target }}
+          path: artifact
+      - name: Smoke test (local fixtures + official yt-dlp via file:// URLs)
+        shell: bash
+        run: |
+          python -m zipfile -e artifact/intersect-media-tools-${{ matrix.target }}.zip tools
+          python media/scripts/smoke_test.py --tools tools --fixtures media/fixtures \
+            --target ${{ matrix.target }} --ytdlp --work smoke-work
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: [build, smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: media-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Read versions
+        id: v
+        run: bash media/scripts/versions.sh >> "$GITHUB_OUTPUT"
+
+      - name: FFmpeg source tarball (LGPL)
+        run: |
+          git -C media/ffmpeg archive --format=tar --prefix="ffmpeg-${{ steps.v.outputs.ffmpeg }}/" HEAD \
+            | xz -9 > "artifacts/ffmpeg-${{ steps.v.outputs.ffmpeg }}-source.tar.xz"
+
+      - name: Generate manifest
+        run: |
+          python3 media/scripts/emit_media_manifest.py \
+            --input-dir artifacts \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "media-${{ steps.v.outputs.ffmpeg }}-${{ steps.v.outputs.qjs }}" \
+            --ffmpeg-version "${{ steps.v.outputs.ffmpeg }}" \
+            --qjs-version "${{ steps.v.outputs.qjs }}" \
+            --output artifacts/intersect_media_tools_manifest.json
+
+      - name: Publish release (never marked latest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="media-${{ steps.v.outputs.ffmpeg }}-${{ steps.v.outputs.qjs }}"
+          files=(artifacts/intersect-media-tools-*.zip artifacts/ffmpeg-*-source.tar.xz artifacts/intersect_media_tools_manifest.json)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists -- uploading assets with --clobber"
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" --latest=false \
+              --title "Media tools: FFmpeg ${{ steps.v.outputs.ffmpeg }} + QuickJS-NG ${{ steps.v.outputs.qjs }}" \
+              --notes "ffmpeg (audio-focused LGPL build) and QuickJS-NG for INTERSECT's Import from URL, built from the official sources. yt-dlp is not included; INTERSECT downloads it from yt-dlp's own releases. The FFmpeg source for this build is attached." \
+              "${files[@]}"
+          fi
+
+      - name: Check "latest" is still an ORT release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest=$(gh release view --json tagName --jq .tagName)
+          echo "latest release: $latest"
+          case "$latest" in
+            ort-*) ;;
+            *) echo "::error::latest is $latest; installed plugins read the ORT manifest from releases/latest"; exit 1 ;;
+          esac

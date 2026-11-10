@@ -84,6 +84,57 @@ The plugin's `INTERSECT_ORT_VERSION` (in its `CMakeLists.txt`) is the
 authoritative pin. When that moves, run this workflow against the new version
 and rebuild + republish the MIGraphX bundle before shipping a plugin release.
 
+## Media tools (Import from URL)
+
+INTERSECT's "Import from URL" runs [yt-dlp](https://github.com/yt-dlp/yt-dlp), which needs two
+helpers. Both are built here from official sources pinned as git submodules:
+
+| Tool | Submodule | Why |
+| ---- | --------- | --- |
+| ffmpeg | `media/ffmpeg` → [FFmpeg/FFmpeg](https://github.com/FFmpeg/FFmpeg) (release tag) | turns whatever audio a site serves into WAV |
+| qjs | `media/quickjs` → [quickjs-ng/quickjs](https://github.com/quickjs-ng/quickjs) (release tag) | the JavaScript runtime yt-dlp needs for YouTube |
+
+**yt-dlp itself is not built or hosted here.** The plugin downloads it from yt-dlp's own
+releases (checked against their `SHA2-256SUMS`) and keeps it updated from there. These two
+helpers rarely need to change, because site changes break yt-dlp, not ffmpeg or QuickJS.
+
+**The ffmpeg build** is LGPL and audio-focused. It keeps every demuxer and every audio decoder,
+has PCM/WAV output only, no network protocols, and no ffprobe/ffplay. That's about 8 MB, or about
+4.5 MB per platform zip together with qjs. `media/scripts/build_tools.sh` has the configure line,
+and each zip's `BUILDINFO.txt` records it too.
+
+**Building:** GitHub Actions → **Build Media Tools** → Run workflow.
+- Every run builds all six platforms (linux-x64/arm64, macos-arm64/x64, win-x64/arm64).
+- Linux builds run in `ubuntu:22.04` (glibc ≤ 2.35). Windows builds cross-compile with a
+  pinned llvm-mingw.
+- Each build is smoke-tested on a native runner of its platform with
+  `media/scripts/smoke_test.py`, using local fixtures plus the official yt-dlp through `file://`
+  URLs (no websites).
+- Tick **publish** to create a `media-<ffmpeg>-<qjs>` release.
+
+**Releases are never marked "latest".** Installed plugins read the ORT manifest from
+`releases/latest/download/…`, so "latest" must stay on the newest `ort-*` release; the publish
+job checks this. The plugin finds the newest `media-*` release through the releases API. Each
+media release contains:
+
+- `intersect-media-tools-<platform>.zip`: flat `ffmpeg[.exe]`, `qjs[.exe]`, licences and
+  `BUILDINFO.txt`.
+- `intersect_media_tools_manifest.json`: per-platform `download_url`, `sha256`, `bytes` and file
+  names. The schema is in `media/scripts/emit_media_manifest.py`.
+- `ffmpeg-<version>-source.tar.xz`: the exact FFmpeg source, for the LGPL.
+
+**Updating:** the weekly **Check Upstream Media Releases** workflow opens an issue when FFmpeg or
+QuickJS-NG ships a newer stable release. To bump:
+1. `git -C media/ffmpeg fetch --depth 1 origin tag <tag> && git -C media/ffmpeg checkout <tag>`
+   (same for `media/quickjs`).
+2. Commit, then run the workflow, then run it again with publish ticked.
+
+To build one platform locally, run `bash media/scripts/build_tools.sh --target linux-x64 --out out`
+inside `ubuntu:22.04`, after `media/scripts/ci_deps_ubuntu.sh`.
+
+The fixtures in `media/fixtures` are generated tones (CC0); `media/fixtures/generate.sh` recreates
+them.
+
 ## Keeping in sync with the plugin
 
 The bundle catalog this repo produces must stay aligned with the plugin's
